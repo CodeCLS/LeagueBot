@@ -79,7 +79,7 @@ def save_json(index, minions):
     for pos, item in enumerate(minions):
         data["annotations"].append({
             "image_id": image_id,
-            "bbox": [item.x, item.y, item.x + 64, item.y + 64],  # Assuming fixed size for minions
+            "bbox": [item.x, item.y, item.x + 150, item.y + 150],  # Assuming fixed size for minions
             "category_id": 0,  # You can change this if you have multiple classes
             "area": 64 * 64,  # Area of the bounding box (assuming square minion size)
             "iscrowd": 0  # Set to 0 if not part of a crowd
@@ -93,5 +93,5 @@ def save_json(index, minions):
 
 
 if __name__ == "__main__":
-    for i in range(0, 10):
+    for i in range(0, 30):
         create_image(i)

@@ -1,87 +1,99 @@
 import torch
-from torchvision import models, transforms
+import torchvision
 from torch.utils.data import DataLoader
-import os
-import json
-from src.utils.dataset import CustomObjectDetectionDataset  # Assuming you store your dataset class here
+from torchvision.models.detection import fasterrcnn_resnet50_fpn
+import torchvision.transforms as T
+from src.utils.dataset import CustomObjectDetectionDataset
 
-
-# Initialize model
-def get_model():
-    model = models.detection.fasterrcnn_resnet50_fpn(pretrained=True)
-    num_classes = 1  # Adjust for the number of classes in your dataset (10 classes + background)
-    in_features = model.roi_heads.box_predictor.cls_score.in_features
-    model.roi_heads.box_predictor = models.detection.faster_rcnn.FastRCNNPredictor(in_features, num_classes)
-    return model
-
+model = fasterrcnn_resnet50_fpn(pretrained=True)
 def start():
-    # Set up data transformations
-    transform = transforms.Compose([
-        transforms.ToTensor()
+    # Set device to GPU if available
+    device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+
+    # Define transforms for training
+    transform = T.Compose([
+        T.ToTensor(),
+        # Add more transforms if needed (e.g., data augmentation)
     ])
 
-    # Set up dataset and dataloaders
-    train_dataset = CustomObjectDetectionDataset(
-        image_dir='../data/images',
-        annotation_file='../data/annotations/train.json',
-        transform=transform
-    )
+    image_dir = '../data/images'
+    annotation_file = '../data/annotations/train.json'
+    dataset = CustomObjectDetectionDataset(image_dir=image_dir, annotation_file=annotation_file, transform=transform)
 
-    train_dataloader = DataLoader(train_dataset, batch_size=4, shuffle=True)
+    # Split into train and validation datasets if needed
+    train_size = int(0.8 * len(dataset))
+    val_size = len(dataset) - train_size
+    train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
 
-    # Initialize device and model
-    device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-    model = get_model().to(device)
+    # Dataloader
+    train_loader = DataLoader(train_dataset, batch_size=4, shuffle=True, collate_fn=lambda x: tuple(zip(*x)))
+    val_loader = DataLoader(val_dataset, batch_size=4, shuffle=False, collate_fn=lambda x: tuple(zip(*x)))
 
-    # Train the model
-    train(model, train_dataloader, device, num_epochs=10)
+    # Load the Faster R-CNN model
+    num_classes = 2  # Update this to match your dataset (1 class + background)
+    in_features = model.roi_heads.box_predictor.cls_score.in_features
+    model.roi_heads.box_predictor = torchvision.models.detection.faster_rcnn.FastRCNNPredictor(in_features, num_classes)
 
-    # Save the trained model
-    torch.save(model.state_dict(), 'model.pth')
+    # Move model to device
+    model.to(device)
 
-    # Set up the training loop
-def train(model, dataloader, device, num_epochs=3):
-    model.train()
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
+    # Define optimizer and learning rate
+    params = [p for p in model.parameters() if p.requires_grad]
+    optimizer = torch.optim.SGD(params, lr=0.005, momentum=0.9, weight_decay=0.0005)
+    num_epochs = 40
 
+    # Training loop
     for epoch in range(num_epochs):
-        running_loss = 0.0
-        for images, targets in dataloader:
-            images = [image.to(device) for image in images]
-            # Create an empty list to store the processed target dictionaries
-            processed_targets = []
+        train_one_epoch(model, optimizer, train_loader, device, epoch)
+        evaluate(model, val_loader, device)
 
-            # Iterate over each target in the 'targets' list
-            for t in targets:
-                # Create an empty dictionary to store the processed key-value pairs
-                processed_target = {}
+# Save the trained model
 
-                # Iterate over the key-value pairs in the target dictionary
-                for k, v in targets[t]:
-                    # Move each value (tensor) to the specified device
-                    processed_target[k] = v.to(device)
+# Training function
+def train_one_epoch(model, optimizer, data_loader, device, epoch):
+    model.train()
+    total_loss = 0
+    for images, targets in data_loader:
+        # Move images and targets to device
+        images = list(image.to(device) for image in images)
+        targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
 
-                # Append the processed target dictionary to the list
-                processed_targets.append(processed_target)
+        # Forward pass and calculate loss
+        loss_dict = model(images, targets)
+        losses = sum(loss for loss in loss_dict.values())
 
-            # Assign the processed targets back to the original variable
-            targets = processed_targets
+        # Backpropagation
+        optimizer.zero_grad()
+        losses.backward()
+        optimizer.step()
 
-            optimizer.zero_grad()
-            loss_dict = model(images, targets)
-
-            losses = sum(loss for loss in loss_dict.values())
-            losses.backward()
-            optimizer.step()
-
-            running_loss += losses.item()
+        total_loss += losses.item()
 
 
+    print(f"Epoch {epoch + 1}, Loss: {total_loss / len(data_loader)}")
+
+# Evaluation function (basic)
+# Evaluation function (modified to calculate loss)
+def evaluate(model, data_loader, device):
+    model.train()  # Keep the model in train mode to calculate loss
+    total_loss = 0
+    for images, targets in data_loader:
+        images = list(img.to(device) for img in images)
+        targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
+
+        # Calculate loss
+        loss_dict = model(images, targets)  # Get a dictionary of losses
+        losses = sum(loss for loss in loss_dict.values())
+        total_loss += losses.item()
+    model.eval()  # Keep the model in train mode to calculate loss
+
+    print(f"Validation Loss: {total_loss / len(data_loader)}")
 
 
-    print(f'Epoch #{epoch + 1} - Loss: {running_loss / len(dataloader):.4f}')
 
 
 if __name__ == "__main__":
     start()
+    torch.save(model.state_dict(), "fasterrcnn_model.pth")
+
 

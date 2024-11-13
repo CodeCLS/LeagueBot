@@ -55,4 +55,6 @@ class CustomObjectDetectionDataset(Dataset):
         if self.transform:
             image = self.transform(image)
 
+        print(target.keys())  # Should include 'boxes' and 'labels'
+
         return image, target
