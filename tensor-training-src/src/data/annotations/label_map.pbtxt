@@ -1,0 +1,49 @@
+item {
+  id: 1
+  name: 'minion'
+}
+
+item {
+  id: 2
+  name: 'champion'
+}
+
+item {
+  id: 3
+  name: 'monster'
+}
+
+item {
+  id: 4
+  name: 'turret'
+}
+
+item {
+  id: 5
+  name: 'ward'
+}
+
+item {
+  id: 6
+  name: 'dragon'
+}
+
+item {
+  id: 7
+  name: 'baron'
+}
+
+item {
+  id: 8
+  name: 'tower'
+}
+
+item {
+  id: 9
+  name: 'jungle_camp'
+}
+
+item {
+  id: 10
+  name: 'object'
+}
